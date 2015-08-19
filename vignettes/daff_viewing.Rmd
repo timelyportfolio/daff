@@ -1,0 +1,48 @@
+---
+title: "Viewing Your daff"
+author: "Kent Russell"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Viewing daff}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+The first purpose of this vignette is to test the functionality of `render_diff` in a `rmarkdown` document.  As of version 0.1.4, `daff` had really no support for rendering in `rmarkdown`.  Going forward though, using `htmltools` from RStudio should allow us to integrate seamlessly into `rmarkdown`.
+
+Let's see if the change works.
+
+### Does It Work?
+
+```{r results='asis'}
+library(daff)
+
+y <- iris[1:3,]
+x <- y
+
+x <- head(x,2) # remove a row
+x[1,1] <- 10 # change a value
+x$hello <- "world"  # add a column
+x$Species <- NULL # remove a column
+
+patch <- diff_data(y, x)
+render_diff(patch, fragment = F)
+```
+
+Now with `fragment = TRUE`, which is the default.  I wonder if it should now be `FALSE`.
+
+```{r}
+library(daff)
+
+y <- iris[1:3,]
+x <- y
+
+x <- head(x,2) # remove a row
+x[1,1] <- 10 # change a value
+x$hello <- "world"  # add a column
+x$Species <- NULL # remove a column
+
+patch <- diff_data(y, x)
+render_diff(patch, fragment = T)
+```

@@ -12,4 +12,6 @@ License: MIT + file LICENSE
 LazyData: true
 Imports: V8 (>= 0.6), jsonlite
 URL: http://github.com/edwindj/daff
-Suggests: testthat
+Suggests: testthat,
+    knitr
+VignetteBuilder: knitr
