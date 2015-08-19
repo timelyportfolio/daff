@@ -3,6 +3,14 @@ $hx_exports.coopy = $hx_exports.coopy || {};
 var console = (1,eval)('this').console || {log:function(){}};
 var HxOverrides = function() { };
 HxOverrides.__name__ = true;
+HxOverrides.dateStr = function(date) {
+	var m = date.getMonth() + 1;
+	var d = date.getDate();
+	var h = date.getHours();
+	var mi = date.getMinutes();
+	var s = date.getSeconds();
+	return date.getFullYear() + "-" + (m < 10?"0" + m:"" + m) + "-" + (d < 10?"0" + d:"" + d) + " " + (h < 10?"0" + h:"" + h) + ":" + (mi < 10?"0" + mi:"" + mi) + ":" + (s < 10?"0" + s:"" + s);
+};
 HxOverrides.cca = function(s,index) {
 	var x = s.charCodeAt(index);
 	if(x != x) return undefined;
@@ -66,6 +74,7 @@ List.prototype = {
 	,iterator: function() {
 		return new _List.ListIterator(this.h);
 	}
+	,__class__: List
 };
 var _List = {};
 _List.ListIterator = function(head) {
@@ -82,6 +91,7 @@ _List.ListIterator.prototype = {
 		this.head = this.head[1];
 		return this.val;
 	}
+	,__class__: _List.ListIterator
 };
 Math.__name__ = true;
 var Reflect = function() { };
@@ -93,6 +103,9 @@ Reflect.field = function(o,field) {
 		return null;
 	}
 };
+Reflect.setField = function(o,field,value) {
+	o[field] = value;
+};
 Reflect.fields = function(o) {
 	var a = [];
 	if(o != null) {
@@ -102,6 +115,9 @@ Reflect.fields = function(o) {
 		}
 	}
 	return a;
+};
+Reflect.isFunction = function(f) {
+	return typeof(f) == "function" && !(f.__name__ || f.__ename__);
 };
 var Std = function() { };
 Std.__name__ = true;
@@ -114,6 +130,9 @@ Std.parseInt = function(x) {
 	if(isNaN(v)) return null;
 	return v;
 };
+Std.parseFloat = function(x) {
+	return parseFloat(x);
+};
 var StringBuf = function() {
 	this.b = "";
 };
@@ -122,11 +141,68 @@ StringBuf.prototype = {
 	add: function(x) {
 		this.b += Std.string(x);
 	}
+	,__class__: StringBuf
 };
 var StringTools = function() { };
 StringTools.__name__ = true;
+StringTools.lpad = function(s,c,l) {
+	if(c.length <= 0) return s;
+	while(s.length < l) s = c + s;
+	return s;
+};
 StringTools.replace = function(s,sub,by) {
 	return s.split(sub).join(by);
+};
+StringTools.fastCodeAt = function(s,index) {
+	return s.charCodeAt(index);
+};
+var ValueType = { __ename__ : true, __constructs__ : ["TNull","TInt","TFloat","TBool","TObject","TFunction","TClass","TEnum","TUnknown"] };
+ValueType.TNull = ["TNull",0];
+ValueType.TNull.__enum__ = ValueType;
+ValueType.TInt = ["TInt",1];
+ValueType.TInt.__enum__ = ValueType;
+ValueType.TFloat = ["TFloat",2];
+ValueType.TFloat.__enum__ = ValueType;
+ValueType.TBool = ["TBool",3];
+ValueType.TBool.__enum__ = ValueType;
+ValueType.TObject = ["TObject",4];
+ValueType.TObject.__enum__ = ValueType;
+ValueType.TFunction = ["TFunction",5];
+ValueType.TFunction.__enum__ = ValueType;
+ValueType.TClass = function(c) { var $x = ["TClass",6,c]; $x.__enum__ = ValueType; return $x; };
+ValueType.TEnum = function(e) { var $x = ["TEnum",7,e]; $x.__enum__ = ValueType; return $x; };
+ValueType.TUnknown = ["TUnknown",8];
+ValueType.TUnknown.__enum__ = ValueType;
+var Type = function() { };
+Type.__name__ = true;
+Type["typeof"] = function(v) {
+	var _g = typeof(v);
+	switch(_g) {
+	case "boolean":
+		return ValueType.TBool;
+	case "string":
+		return ValueType.TClass(String);
+	case "number":
+		if(Math.ceil(v) == v % 2147483648.0) return ValueType.TInt;
+		return ValueType.TFloat;
+	case "object":
+		if(v == null) return ValueType.TNull;
+		var e = v.__enum__;
+		if(e != null) return ValueType.TEnum(e);
+		var c = js.Boot.getClass(v);
+		if(c != null) return ValueType.TClass(c);
+		return ValueType.TObject;
+	case "function":
+		if(v.__name__ || v.__ename__) return ValueType.TObject;
+		return ValueType.TFunction;
+	case "undefined":
+		return ValueType.TNull;
+	default:
+		return ValueType.TUnknown;
+	}
+};
+Type.enumIndex = function(e) {
+	return e[1];
 };
 var coopy = {};
 coopy.Alignment = function() {
@@ -189,6 +265,12 @@ coopy.Alignment.prototype = {
 		if(this.order_cache == null) this.order_cache = this.toOrder3();
 		if(this.reference != null) this.order_cache_has_reference = true;
 		return this.order_cache;
+	}
+	,addToOrder: function(l,r,p) {
+		if(p == null) p = -2;
+		if(this.order_cache == null) this.order_cache = new coopy.Ordering();
+		this.order_cache.add(l,r,p);
+		this.order_cache_has_reference = p != -2;
 	}
 	,getSource: function() {
 		return this.ta;
@@ -365,9 +447,13 @@ coopy.Alignment.prototype = {
 		}
 		return order;
 	}
+	,__class__: coopy.Alignment
 };
 coopy.CellBuilder = function() { };
 coopy.CellBuilder.__name__ = true;
+coopy.CellBuilder.prototype = {
+	__class__: coopy.CellBuilder
+};
 coopy.CellInfo = $hx_exports.coopy.CellInfo = function() {
 };
 coopy.CellInfo.__name__ = true;
@@ -377,6 +463,7 @@ coopy.CellInfo.prototype = {
 		if(!this.conflicted) return this.lvalue + "::" + this.rvalue;
 		return this.pvalue + "||" + this.lvalue + "::" + this.rvalue;
 	}
+	,__class__: coopy.CellInfo
 };
 coopy.CompareFlags = $hx_exports.coopy.CompareFlags = function() {
 	this.ordered = true;
@@ -390,6 +477,7 @@ coopy.CompareFlags = $hx_exports.coopy.CompareFlags = function() {
 	this.acts = null;
 	this.ids = null;
 	this.columns_to_ignore = null;
+	this.allow_nested_cells = false;
 };
 coopy.CompareFlags.__name__ = true;
 coopy.CompareFlags.prototype = {
@@ -435,6 +523,7 @@ coopy.CompareFlags.prototype = {
 		if(this.columns_to_ignore == null) this.columns_to_ignore = new Array();
 		this.columns_to_ignore.push(column);
 	}
+	,__class__: coopy.CompareFlags
 };
 coopy.CompareTable = $hx_exports.coopy.CompareTable = function(comp) {
 	this.comp = comp;
@@ -855,12 +944,16 @@ coopy.CompareTable.prototype = {
 	,getIndexes: function() {
 		return this.indexes;
 	}
+	,__class__: coopy.CompareTable
 };
 coopy.Coopy = $hx_exports.coopy.Coopy = function() {
 	this.extern_preference = false;
 	this.format_preference = null;
 	this.delim_preference = null;
 	this.output_format = "copy";
+	this.nested_output = false;
+	this.order_set = false;
+	this.order_preference = false;
 };
 coopy.Coopy.__name__ = true;
 coopy.Coopy.compareTables = function(local,remote,flags) {
@@ -890,6 +983,7 @@ coopy.Coopy.keepAround = function() {
 	var hp = new coopy.HighlightPatch(null,null);
 	var csv = new coopy.Csv();
 	var tm = new coopy.TableModifier(null);
+	var sc = new coopy.SqlCompare(null,null,null);
 	return 0;
 };
 coopy.Coopy.cellFor = function(x) {
@@ -976,7 +1070,7 @@ coopy.Coopy.jsonify = function(t) {
 		while(_g1 < w) {
 			var x = _g1++;
 			var v = t.getCell(x,y);
-			if(v != null) row.push(v.toString()); else row.push(null);
+			row.push(v);
 		}
 		sheet.push(row);
 	}
@@ -994,6 +1088,9 @@ coopy.Coopy.prototype = {
 			case "json":
 				this.format_preference = "json";
 				break;
+			case "ndjson":
+				this.format_preference = "ndjson";
+				break;
 			case "csv":
 				this.format_preference = "csv";
 				this.delim_preference = ",";
@@ -1006,10 +1103,18 @@ coopy.Coopy.prototype = {
 				this.format_preference = "csv";
 				this.delim_preference = ";";
 				break;
+			case "sqlite3":
+				this.format_preference = "sqlite";
+				break;
+			case "sqlite":
+				this.format_preference = "sqlite";
+				break;
 			default:
 				ext = "";
 			}
 		}
+		this.nested_output = this.format_preference == "json" || this.format_preference == "ndjson";
+		this.order_preference = !this.nested_output;
 		return ext;
 	}
 	,setFormat: function(name) {
@@ -1021,10 +1126,13 @@ coopy.Coopy.prototype = {
 		if(this.output_format != "copy") this.setFormat(this.output_format);
 		var txt = "";
 		this.checkFormat(name);
-		if(this.format_preference != "json") {
+		if(this.format_preference == "csv") {
 			var csv = new coopy.Csv(this.delim_preference);
 			txt = csv.renderTable(t);
-		} else txt = JSON.stringify(coopy.Coopy.jsonify(t));
+		} else if(this.format_preference == "ndjson") txt = new coopy.Ndjson(t).render(); else if(this.format_preference == "sqlite") {
+			this.io.writeStderr("! Cannot yet output to sqlite, aborting\n");
+			return false;
+		} else txt = haxe.Json.stringify(coopy.Coopy.jsonify(t),null,"  ");
 		return this.saveText(name,txt);
 	}
 	,saveText: function(name,txt) {
@@ -1034,12 +1142,37 @@ coopy.Coopy.prototype = {
 	,loadTable: function(name) {
 		var txt = this.io.getContent(name);
 		var ext = this.checkFormat(name);
-		if(ext == "json" || ext == "") try {
-			var json = JSON.parse(txt);
-			this.format_preference = "json";
-			var t = coopy.Coopy.jsonToTable(json);
-			if(t == null) throw "JSON failed";
+		if(ext == "sqlite") {
+			var sql = this.io.openSqliteDatabase(name);
+			if(sql == null) {
+				this.io.writeStderr("! Cannot open database, aborting\n");
+				return null;
+			}
+			var helper = new coopy.SqliteHelper();
+			var names = helper.getTableNames(sql);
+			if(names == null) {
+				this.io.writeStderr("! Cannot find database tables, aborting\n");
+				return null;
+			}
+			if(names.length == 0) {
+				this.io.writeStderr("! No tables in database, aborting\n");
+				return null;
+			}
+			var tab = new coopy.SqlTable(sql,new coopy.SqlTableName(names[0]),helper);
+			return tab;
+		}
+		if(ext == "ndjson") {
+			var t = new coopy.SimpleTable(0,0);
+			var ndjson = new coopy.Ndjson(t);
+			ndjson.parse(txt);
 			return t;
+		}
+		if(ext == "json" || ext == "") try {
+			var json = new haxe.format.JsonParser(txt).parseRec();
+			this.format_preference = "json";
+			var t1 = coopy.Coopy.jsonToTable(json);
+			if(t1 == null) throw "JSON failed";
+			return t1;
 		} catch( e ) {
 			if(ext == "json") throw e;
 		}
@@ -1273,6 +1406,19 @@ coopy.Coopy.prototype = {
 					git = true;
 					args.splice(i,1);
 					break;
+				} else if(tag == "--unordered") {
+					more = true;
+					flags.ordered = false;
+					flags.unchanged_context = 0;
+					this.order_set = true;
+					args.splice(i,1);
+					break;
+				} else if(tag == "--ordered") {
+					more = true;
+					flags.ordered = true;
+					this.order_set = true;
+					args.splice(i,1);
+					break;
 				} else if(tag == "--color") {
 					more = true;
 					color = true;
@@ -1343,7 +1489,7 @@ coopy.Coopy.prototype = {
 			io.writeStderr("Call as:\n");
 			io.writeStderr("  daff [--color] [--output OUTPUT.csv] a.csv b.csv\n");
 			io.writeStderr("  daff [--output OUTPUT.csv] parent.csv a.csv b.csv\n");
-			io.writeStderr("  daff [--output OUTPUT.jsonbook] a.jsonbook b.jsonbook\n");
+			io.writeStderr("  daff [--output OUTPUT.ndjson] a.ndjson b.ndjson\n");
 			io.writeStderr("  daff patch [--inplace] [--output OUTPUT.csv] a.csv patch.csv\n");
 			io.writeStderr("  daff merge [--inplace] [--output OUTPUT.csv] parent.csv a.csv b.csv\n");
 			io.writeStderr("  daff trim [--output OUTPUT.csv] source.csv\n");
@@ -1356,14 +1502,16 @@ coopy.Coopy.prototype = {
 			io.writeStderr("\n");
 			io.writeStderr("If you need more control, here is the full list of flags:\n");
 			io.writeStderr("  daff diff [--output OUTPUT.csv] [--context NUM] [--all] [--act ACT] a.csv b.csv\n");
-			io.writeStderr("     --id:          specify column to use as primary key (repeat for multi-column key)\n");
-			io.writeStderr("     --ignore:      specify column to ignore completely (can repeat)\n");
+			io.writeStderr("     --act ACT:     show only a certain kind of change (update, insert, delete)\n");
+			io.writeStderr("     --all:         do not prune unchanged rows\n");
 			io.writeStderr("     --color:       highlight changes with terminal colors\n");
 			io.writeStderr("     --context NUM: show NUM rows of context\n");
-			io.writeStderr("     --all:         do not prune unchanged rows\n");
-			io.writeStderr("     --act ACT:     show only a certain kind of change (update, insert, delete)\n");
+			io.writeStderr("     --id:          specify column to use as primary key (repeat for multi-column key)\n");
+			io.writeStderr("     --ignore:      specify column to ignore completely (can repeat)\n");
 			io.writeStderr("     --input-format [csv|tsv|ssv|json]: set format to expect for input\n");
+			io.writeStderr("     --ordered:     assume row order is meaningful (default for CSV)\n");
 			io.writeStderr("     --output-format [csv|tsv|ssv|json|copy]: set format for output\n");
+			io.writeStderr("     --unordered:   assume row order is meaningless (default for json formats)\n");
 			io.writeStderr("\n");
 			io.writeStderr("  daff diff --git path old-file old-hex old-mode new-file new-hex new-mode\n");
 			io.writeStderr("     --git:         process arguments provided by git to diff drivers\n");
@@ -1425,12 +1573,16 @@ coopy.Coopy.prototype = {
 		if(output == null) output = "-";
 		var ok = true;
 		if(cmd1 == "diff") {
+			if(!this.order_set) {
+				flags.ordered = this.order_preference;
+				if(!flags.ordered) flags.unchanged_context = 0;
+			}
+			flags.allow_nested_cells = this.nested_output;
 			var ct1 = coopy.Coopy.compareTables3(parent,a,b,flags);
 			var align = ct1.align();
 			var td = new coopy.TableDiff(align,flags);
 			var o = new coopy.SimpleTable(0,0);
 			td.hilite(o);
-
 			if(color) {
 				var render = new coopy.TerminalDiffRender();
 				tool.saveText(output,render.render(o));
@@ -1455,10 +1607,14 @@ coopy.Coopy.prototype = {
 		} else if(cmd1 == "copy") tool.saveTable(output,a);
 		if(ok) return 0; else return 1;
 	}
+	,__class__: coopy.Coopy
 };
 coopy.CrossMatch = function() {
 };
 coopy.CrossMatch.__name__ = true;
+coopy.CrossMatch.prototype = {
+	__class__: coopy.CrossMatch
+};
 coopy.Csv = $hx_exports.coopy.Csv = function(delim) {
 	if(delim == null) delim = ",";
 	this.cursor = 0;
@@ -1618,6 +1774,7 @@ coopy.Csv.prototype = {
 		this.has_structure = false;
 		return this.parseCellPart(txt);
 	}
+	,__class__: coopy.Csv
 };
 coopy.DiffRender = $hx_exports.coopy.DiffRender = function() {
 	this.text_to_insert = new Array();
@@ -1625,7 +1782,11 @@ coopy.DiffRender = $hx_exports.coopy.DiffRender = function() {
 	this.pretty_arrows = true;
 };
 coopy.DiffRender.__name__ = true;
-coopy.DiffRender.examineCell = function(x,y,value,vcol,vrow,vcorner,cell) {
+coopy.DiffRender.examineCell = function(x,y,view,raw,vcol,vrow,vcorner,cell,offset) {
+	if(offset == null) offset = 0;
+	var nested = view.isHash(raw);
+	var value = null;
+	if(!nested) value = view.toString(raw);
 	cell.category = "";
 	cell.category_given_tr = "";
 	cell.separator = "";
@@ -1640,11 +1801,12 @@ coopy.DiffRender.examineCell = function(x,y,value,vcol,vrow,vcorner,cell) {
 	if(vcol == null) vcol = "";
 	var removed_column = false;
 	if(vrow == ":") cell.category = "move";
+	if(vrow == "" && offset == 1 && y == 0) cell.category = "index";
 	if(vcol.indexOf("+++") >= 0) cell.category_given_tr = cell.category = "add"; else if(vcol.indexOf("---") >= 0) {
 		cell.category_given_tr = cell.category = "remove";
 		removed_column = true;
 	}
-	if(vrow == "!") cell.category = "spec"; else if(vrow == "@@") cell.category = "header"; else if(vrow == "+++") {
+	if(vrow == "!") cell.category = "spec"; else if(vrow == "@@") cell.category = "header"; else if(vrow == "...") cell.category = "gap"; else if(vrow == "+++") {
 		if(!removed_column) cell.category = "add";
 	} else if(vrow == "---") cell.category = "remove"; else if(vrow.indexOf("->") >= 0) {
 		if(!removed_column) {
@@ -1652,20 +1814,22 @@ coopy.DiffRender.examineCell = function(x,y,value,vcol,vrow,vcorner,cell) {
 			var full = vrow;
 			var part = tokens[1];
 			if(part == null) part = full;
-			if(cell.value.indexOf(part) >= 0) {
+			if(nested || cell.value.indexOf(part) >= 0) {
 				var cat = "modify";
 				var div = part;
 				if(part != full) {
-					if(cell.value.indexOf(full) >= 0) {
+					if(nested) cell.conflicted = view.hashExists(raw,"theirs"); else cell.conflicted = cell.value.indexOf(full) >= 0;
+					if(cell.conflicted) {
 						div = full;
 						cat = "conflict";
-						cell.conflicted = true;
 					}
 				}
 				cell.updated = true;
 				cell.separator = div;
 				cell.pretty_separator = div;
-				if(cell.pretty_value == div) tokens = ["",""]; else tokens = cell.pretty_value.split(div);
+				if(nested) {
+					if(cell.conflicted) tokens = [view.hashGet(raw,"before"),view.hashGet(raw,"ours"),view.hashGet(raw,"theirs")]; else tokens = [view.hashGet(raw,"before"),view.hashGet(raw,"after")];
+				} else if(cell.pretty_value == div) tokens = ["",""]; else tokens = cell.pretty_value.split(div);
 				var pretty_tokens = tokens;
 				if(tokens.length >= 2) {
 					pretty_tokens[0] = coopy.DiffRender.markSpaces(tokens[0],tokens[1]);
@@ -1679,14 +1843,15 @@ coopy.DiffRender.examineCell = function(x,y,value,vcol,vrow,vcorner,cell) {
 				cell.pretty_separator = String.fromCharCode(8594);
 				cell.pretty_value = pretty_tokens.join(cell.pretty_separator);
 				cell.category_given_tr = cell.category = cat;
-				var offset;
-				if(cell.conflicted) offset = 1; else offset = 0;
-				cell.lvalue = tokens[offset];
-				cell.rvalue = tokens[offset + 1];
+				var offset1;
+				if(cell.conflicted) offset1 = 1; else offset1 = 0;
+				cell.lvalue = tokens[offset1];
+				cell.rvalue = tokens[offset1 + 1];
 				if(cell.conflicted) cell.pvalue = tokens[0];
 			}
 		}
 	}
+	if(x == 0 && offset > 0) cell.category_given_tr = cell.category = "index";
 };
 coopy.DiffRender.markSpaces = function(sl,sr) {
 	if(sl == sr) return sl;
@@ -1712,12 +1877,12 @@ coopy.DiffRender.markSpaces = function(sl,sr) {
 	}
 	return slo;
 };
-coopy.DiffRender.renderCell = function(tt,x,y) {
+coopy.DiffRender.renderCell = function(tab,view,x,y) {
 	var cell = new coopy.CellInfo();
-	var corner = tt.getCellText(0,0);
+	var corner = view.toString(tab.getCell(0,0));
 	var off;
 	if(corner == "@:@") off = 1; else off = 0;
-	coopy.DiffRender.examineCell(x,y,tt.getCellText(x,y),tt.getCellText(x,off),tt.getCellText(off,y),corner,cell);
+	coopy.DiffRender.examineCell(x,y,view,tab.getCell(x,y),view.toString(tab.getCell(x,off)),view.toString(tab.getCell(off,y)),corner,cell,off);
 	return cell;
 };
 coopy.DiffRender.prototype = {
@@ -1729,6 +1894,21 @@ coopy.DiffRender.prototype = {
 	}
 	,beginTable: function() {
 		this.insert("<table>\n");
+		this.section = null;
+	}
+	,setSection: function(str) {
+		if(str == this.section) return;
+		if(this.section != null) {
+			this.insert("</t");
+			this.insert(this.section);
+			this.insert(">\n");
+		}
+		this.section = str;
+		if(this.section != null) {
+			this.insert("<t");
+			this.insert(this.section);
+			this.insert(">\n");
+		}
 	}
 	,beginRow: function(mode) {
 		this.td_open = "<td";
@@ -1737,7 +1917,8 @@ coopy.DiffRender.prototype = {
 		if(mode == "header") {
 			this.td_open = "<th";
 			this.td_close = "</th>";
-		} else row_class = mode;
+		}
+		row_class = mode;
 		var tr = "<tr>";
 		if(row_class != "") tr = "<tr class=\"" + row_class + "\">";
 		this.insert(tr);
@@ -1753,6 +1934,7 @@ coopy.DiffRender.prototype = {
 		this.insert("</tr>\n");
 	}
 	,endTable: function() {
+		this.setSection(null);
 		this.insert("</table>\n");
 	}
 	,html: function() {
@@ -1766,9 +1948,9 @@ coopy.DiffRender.prototype = {
 		var render = this;
 		render.beginTable();
 		var change_row = -1;
-		var tt = new coopy.TableText(tab);
 		var cell = new coopy.CellInfo();
-		var corner = tt.getCellText(0,0);
+		var view = tab.getCellView();
+		var corner = view.toString(tab.getCell(0,0));
 		var off;
 		if(corner == "@:@") off = 1; else off = 0;
 		if(off > 0) {
@@ -1779,17 +1961,18 @@ coopy.DiffRender.prototype = {
 		while(_g1 < _g) {
 			var row = _g1++;
 			var open = false;
-			var txt = tt.getCellText(off,row);
+			var txt = view.toString(tab.getCell(off,row));
 			if(txt == null) txt = "";
-			coopy.DiffRender.examineCell(0,row,txt,"",txt,corner,cell);
+			coopy.DiffRender.examineCell(off,row,view,txt,"",txt,corner,cell,off);
 			var row_mode = cell.category;
 			if(row_mode == "spec") change_row = row;
+			if(row_mode == "header" || row_mode == "spec" || row_mode == "index") this.setSection("head"); else this.setSection("body");
 			render.beginRow(row_mode);
 			var _g3 = 0;
 			var _g2 = tab.get_width();
 			while(_g3 < _g2) {
 				var c = _g3++;
-				coopy.DiffRender.examineCell(c,row,tt.getCellText(c,row),change_row >= 0?tt.getCellText(c,change_row):"",txt,corner,cell);
+				coopy.DiffRender.examineCell(c,row,view,tab.getCell(c,row),change_row >= 0?view.toString(tab.getCell(c,change_row)):"",txt,corner,cell,off);
 				render.insertCell(this.pretty_arrows?cell.pretty_value:cell.value,cell.category_given_tr);
 			}
 			render.endRow();
@@ -1798,15 +1981,16 @@ coopy.DiffRender.prototype = {
 		return this;
 	}
 	,sampleCss: function() {
-		return ".highlighter .add { \n  background-color: #7fff7f;\n}\n\n.highlighter .remove { \n  background-color: #ff7f7f;\n}\n\n.highlighter td.modify { \n  background-color: #7f7fff;\n}\n\n.highlighter td.conflict { \n  background-color: #f00;\n}\n\n.highlighter .spec { \n  background-color: #aaa;\n}\n\n.highlighter .move { \n  background-color: #ffa;\n}\n\n.highlighter .null { \n  color: #888;\n}\n\n.highlighter table { \n  border-collapse:collapse;\n}\n\n.highlighter td, .highlighter th {\n  border: 1px solid #2D4068;\n  padding: 3px 7px 2px;\n}\n\n.highlighter th, .highlighter .header { \n  background-color: #aaf;\n  font-weight: bold;\n  padding-bottom: 4px;\n  padding-top: 5px;\n  text-align:left;\n}\n\n.highlighter tr:first-child td {\n  border-top: 1px solid #2D4068;\n}\n\n.highlighter td:first-child { \n  border-left: 1px solid #2D4068;\n}\n\n.highlighter td {\n  empty-cells: show;\n}\n";
+		return ".highlighter .add { \n  background-color: #7fff7f;\n}\n\n.highlighter .remove { \n  background-color: #ff7f7f;\n}\n\n.highlighter td.modify { \n  background-color: #7f7fff;\n}\n\n.highlighter td.conflict { \n  background-color: #f00;\n}\n\n.highlighter .spec { \n  background-color: #aaa;\n}\n\n.highlighter .move { \n  background-color: #ffa;\n}\n\n.highlighter .null { \n  color: #888;\n}\n\n.highlighter table { \n  border-collapse:collapse;\n}\n\n.highlighter td, .highlighter th {\n  border: 1px solid #2D4068;\n  padding: 3px 7px 2px;\n}\n\n.highlighter th, .highlighter .header { \n  background-color: #aaf;\n  font-weight: bold;\n  padding-bottom: 4px;\n  padding-top: 5px;\n  text-align:left;\n}\n\n.highlighter tr.header th {\n  border-bottom: 2px solid black;\n}\n\n.highlighter tr.index td, .highlighter .index, .highlighter tr.header th.index {\n  background-color: white;\n  border: none;\n}\n\n.highlighter .gap {\n  color: #888;\n}\n\n.highlighter td {\n  empty-cells: show;\n}\n";
 	}
 	,completeHtml: function() {
-		this.text_to_insert.splice(0,0,"<html>\n<meta charset='utf-8'>\n<head>\n<style TYPE='text/css'>\n");
+		this.text_to_insert.splice(0,0,"<!DOCTYPE html>\n<html>\n<head>\n<meta charset='utf-8'>\n<style TYPE='text/css'>\n");
 		var x = this.sampleCss();
 		this.text_to_insert.splice(1,0,x);
 		this.text_to_insert.splice(2,0,"</style>\n</head>\n<body>\n<div class='highlighter'>\n");
 		this.text_to_insert.push("</div>\n</body>\n</html>\n");
 	}
+	,__class__: coopy.DiffRender
 };
 coopy.FlatCellBuilder = function() {
 };
@@ -1852,13 +2036,18 @@ coopy.FlatCellBuilder.prototype = {
 	,links: function(unit) {
 		return this.view.toDatum(unit.toString());
 	}
+	,__class__: coopy.FlatCellBuilder
 };
 coopy.Row = function() { };
 coopy.Row.__name__ = true;
+coopy.Row.prototype = {
+	__class__: coopy.Row
+};
 coopy.HighlightPatch = $hx_exports.coopy.HighlightPatch = function(source,patch) {
 	this.source = source;
 	this.patch = patch;
 	this.view = patch.getCellView();
+	this.sourceView = source.getCellView();
 };
 coopy.HighlightPatch.__name__ = true;
 coopy.HighlightPatch.__interfaces__ = [coopy.Row];
@@ -2050,12 +2239,12 @@ coopy.HighlightPatch.prototype = {
 	}
 	,checkAct: function() {
 		var act = this.getString(this.rcOffset);
-		if(this.rowInfo.value != act) coopy.DiffRender.examineCell(0,0,act,"",act,"",this.rowInfo);
+		if(this.rowInfo.value != act) coopy.DiffRender.examineCell(0,0,this.view,act,"",act,"",this.rowInfo);
 	}
 	,getPreString: function(txt) {
 		this.checkAct();
 		if(!this.rowInfo.updated) return txt;
-		coopy.DiffRender.examineCell(0,0,txt,"",this.rowInfo.value,"",this.cellInfo);
+		coopy.DiffRender.examineCell(0,0,this.view,txt,"",this.rowInfo.value,"",this.cellInfo);
 		if(!this.cellInfo.updated) return txt;
 		return this.cellInfo.lvalue;
 	}
@@ -2234,7 +2423,7 @@ coopy.HighlightPatch.prototype = {
 					while( $it1.hasNext() ) {
 						var c1 = $it1.next();
 						var txt = this.view.toString(this.patch.getCell(c1,mod1.patchRow));
-						coopy.DiffRender.examineCell(0,0,txt,"",this.rowInfo.value,"",this.cellInfo);
+						coopy.DiffRender.examineCell(0,0,this.view,txt,"",this.rowInfo.value,"",this.cellInfo);
 						if(!this.cellInfo.updated) continue;
 						if(this.cellInfo.conflicted) continue;
 						var d = this.view.toDatum(this.csv.parseCell(this.cellInfo.rvalue));
@@ -2349,6 +2538,7 @@ coopy.HighlightPatch.prototype = {
 			this.source.setCell(i2,0,this.view.toDatum(next_name));
 		}
 	}
+	,__class__: coopy.HighlightPatch
 };
 coopy.HighlightPatchUnit = $hx_exports.coopy.HighlightPatchUnit = function() {
 	this.add = false;
@@ -2367,6 +2557,7 @@ coopy.HighlightPatchUnit.prototype = {
 	toString: function() {
 		return this.code + " patchRow " + this.patchRow + " sourceRows " + this.sourcePrevRow + "," + this.sourceRow + "," + this.sourceNextRow + " destRow " + this.destRow;
 	}
+	,__class__: coopy.HighlightPatchUnit
 };
 coopy.Index = function() {
 	this.items = new haxe.ds.StringMap();
@@ -2388,7 +2579,10 @@ coopy.Index.prototype = {
 		while(_g1 < _g) {
 			var i = _g1++;
 			var key = this.keys[i];
-			if(key == null) this.keys[i] = key = this.toKey(t,i);
+			if(key == null) {
+				key = this.toKey(t,i);
+				this.keys[i] = key;
+			}
 			var item = this.items.get(key);
 			if(item == null) {
 				item = new coopy.IndexItem();
@@ -2433,6 +2627,7 @@ coopy.Index.prototype = {
 	,getTable: function() {
 		return this.indexed_table;
 	}
+	,__class__: coopy.Index
 };
 coopy.IndexItem = function() {
 };
@@ -2449,6 +2644,7 @@ coopy.IndexItem.prototype = {
 	,value: function() {
 		return this.lst[0];
 	}
+	,__class__: coopy.IndexItem
 };
 coopy.IndexPair = function() {
 	this.ia = new coopy.Index();
@@ -2510,6 +2706,7 @@ coopy.IndexPair.prototype = {
 	,getQuality: function() {
 		return this.quality;
 	}
+	,__class__: coopy.IndexPair
 };
 coopy.Merger = $hx_exports.coopy.Merger = function(parent,local,remote,flags) {
 	this.parent = parent;
@@ -2636,6 +2833,7 @@ coopy.Merger.prototype = {
 		}
 		return this.conflicts;
 	}
+	,__class__: coopy.Merger
 };
 coopy.Mover = $hx_exports.coopy.Mover = function() { };
 coopy.Mover.__name__ = true;
@@ -2780,6 +2978,149 @@ coopy.Mover.moveWithoutExtras = function(src,dest) {
 	}
 	return moved;
 };
+coopy.Ndjson = $hx_exports.coopy.Ndjson = function(tab) {
+	this.tab = tab;
+	this.view = tab.getCellView();
+	this.header_row = 0;
+};
+coopy.Ndjson.__name__ = true;
+coopy.Ndjson.prototype = {
+	renderRow: function(r) {
+		var row = new haxe.ds.StringMap();
+		var _g1 = 0;
+		var _g = this.tab.get_width();
+		while(_g1 < _g) {
+			var c = _g1++;
+			var key = this.view.toString(this.tab.getCell(c,this.header_row));
+			if(c == 0 && this.header_row == 1) key = "@:@";
+			var value = this.tab.getCell(c,r);
+			row.set(key,value);
+		}
+		return haxe.format.JsonPrinter.print(row,null,null);
+	}
+	,render: function() {
+		var txt = "";
+		var offset = 0;
+		if(this.tab.get_height() == 0) return txt;
+		if(this.tab.get_width() == 0) return txt;
+		if(this.tab.getCell(0,0) == "@:@") offset = 1;
+		this.header_row = offset;
+		var _g1 = this.header_row + 1;
+		var _g = this.tab.get_height();
+		while(_g1 < _g) {
+			var r = _g1++;
+			txt += this.renderRow(r);
+			txt += "\n";
+		}
+		return txt;
+	}
+	,addRow: function(r,txt) {
+		var json = new haxe.format.JsonParser(txt).parseRec();
+		if(this.columns == null) this.columns = new haxe.ds.StringMap();
+		var w = this.tab.get_width();
+		var h = this.tab.get_height();
+		var resize = false;
+		var _g = 0;
+		var _g1 = Reflect.fields(json);
+		while(_g < _g1.length) {
+			var name = _g1[_g];
+			++_g;
+			if(!this.columns.exists(name)) {
+				this.columns.set(name,w);
+				w++;
+				resize = true;
+			}
+		}
+		if(r >= h) {
+			h = r + 1;
+			resize = true;
+		}
+		if(resize) this.tab.resize(w,h);
+		var _g2 = 0;
+		var _g11 = Reflect.fields(json);
+		while(_g2 < _g11.length) {
+			var name1 = _g11[_g2];
+			++_g2;
+			var v = Reflect.field(json,name1);
+			var c = this.columns.get(name1);
+			this.tab.setCell(c,r,v);
+		}
+	}
+	,addHeaderRow: function(r) {
+		var names = this.columns.keys();
+		while( names.hasNext() ) {
+			var n = names.next();
+			this.tab.setCell(this.columns.get(n),r,this.view.toDatum(n));
+		}
+	}
+	,parse: function(txt) {
+		this.columns = null;
+		var rows = txt.split("\n");
+		var h = rows.length;
+		if(h == 0) {
+			this.tab.clear();
+			return;
+		}
+		if(rows[h - 1] == "") h--;
+		var _g = 0;
+		while(_g < h) {
+			var i = _g++;
+			var at = h - i - 1;
+			this.addRow(at + 1,rows[at]);
+		}
+		this.addHeaderRow(0);
+	}
+	,__class__: coopy.Ndjson
+};
+coopy.NestedCellBuilder = function() {
+};
+coopy.NestedCellBuilder.__name__ = true;
+coopy.NestedCellBuilder.__interfaces__ = [coopy.CellBuilder];
+coopy.NestedCellBuilder.prototype = {
+	needSeparator: function() {
+		return false;
+	}
+	,setSeparator: function(separator) {
+	}
+	,setConflictSeparator: function(separator) {
+	}
+	,setView: function(view) {
+		this.view = view;
+	}
+	,update: function(local,remote) {
+		var h = this.view.makeHash();
+		this.view.hashSet(h,"before",local);
+		this.view.hashSet(h,"after",remote);
+		return h;
+	}
+	,conflict: function(parent,local,remote) {
+		var h = this.view.makeHash();
+		this.view.hashSet(h,"before",parent);
+		this.view.hashSet(h,"ours",local);
+		this.view.hashSet(h,"theirs",remote);
+		return h;
+	}
+	,marker: function(label) {
+		return this.view.toDatum(label);
+	}
+	,negToNull: function(x) {
+		if(x < 0) return null;
+		return x;
+	}
+	,links: function(unit) {
+		var h = this.view.makeHash();
+		if(unit.p >= -1) {
+			this.view.hashSet(h,"before",this.negToNull(unit.p));
+			this.view.hashSet(h,"ours",this.negToNull(unit.l));
+			this.view.hashSet(h,"theirs",this.negToNull(unit.r));
+			return h;
+		}
+		this.view.hashSet(h,"before",this.negToNull(unit.l));
+		this.view.hashSet(h,"after",this.negToNull(unit.r));
+		return h;
+	}
+	,__class__: coopy.NestedCellBuilder
+};
 coopy.Ordering = function() {
 	this.order = new Array();
 	this.ignore_parent = false;
@@ -2808,9 +3149,13 @@ coopy.Ordering.prototype = {
 	,ignoreParent: function() {
 		this.ignore_parent = true;
 	}
+	,__class__: coopy.Ordering
 };
 coopy.Table = function() { };
 coopy.Table.__name__ = true;
+coopy.Table.prototype = {
+	__class__: coopy.Table
+};
 coopy.SimpleTable = $hx_exports.coopy.SimpleTable = function(w,h) {
 	this.data = new haxe.ds.IntMap();
 	this.w = w;
@@ -3007,9 +3352,13 @@ coopy.SimpleTable.prototype = {
 		}
 		return result;
 	}
+	,__class__: coopy.SimpleTable
 };
 coopy.View = function() { };
 coopy.View.__name__ = true;
+coopy.View.prototype = {
+	__class__: coopy.View
+};
 coopy.SimpleView = $hx_exports.coopy.SimpleView = function() {
 };
 coopy.SimpleView.__name__ = true;
@@ -3028,6 +3377,26 @@ coopy.SimpleView.prototype = {
 	,toDatum: function(x) {
 		return x;
 	}
+	,makeHash: function() {
+		return new haxe.ds.StringMap();
+	}
+	,hashSet: function(h,str,d) {
+		var hh = h;
+		var value = d;
+		hh.set(str,value);
+	}
+	,hashExists: function(h,str) {
+		var hh = h;
+		return hh.exists(str);
+	}
+	,hashGet: function(h,str) {
+		var hh = h;
+		return hh.get(str);
+	}
+	,isHash: function(h) {
+		return js.Boot.__instanceof(h,haxe.ds.StringMap);
+	}
+	,__class__: coopy.SimpleView
 };
 coopy.SparseSheet = function() {
 	this.h = this.w = 0;
@@ -3058,6 +3427,414 @@ coopy.SparseSheet.prototype = {
 		}
 		cursor.set(x,val);
 	}
+	,__class__: coopy.SparseSheet
+};
+coopy.SqlColumn = $hx_exports.coopy.SqlColumn = function() {
+};
+coopy.SqlColumn.__name__ = true;
+coopy.SqlColumn.byNameAndPrimaryKey = function(name,primary) {
+	var result = new coopy.SqlColumn();
+	result.name = name;
+	result.primary = primary;
+	return result;
+};
+coopy.SqlColumn.prototype = {
+	getName: function() {
+		return this.name;
+	}
+	,isPrimaryKey: function() {
+		return this.primary;
+	}
+	,toString: function() {
+		return (this.primary?"*":"") + this.name;
+	}
+	,__class__: coopy.SqlColumn
+};
+coopy.SqlCompare = $hx_exports.coopy.SqlCompare = function(db,local,remote) {
+	this.db = db;
+	this.local = local;
+	this.remote = remote;
+};
+coopy.SqlCompare.__name__ = true;
+coopy.SqlCompare.prototype = {
+	equalArray: function(a1,a2) {
+		if(a1.length != a2.length) return false;
+		var _g1 = 0;
+		var _g = a1.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			if(a1[i] != a2[i]) return false;
+		}
+		return true;
+	}
+	,validateSchema: function() {
+		var all_cols1 = this.local.getColumnNames();
+		var all_cols2 = this.remote.getColumnNames();
+		if(!this.equalArray(all_cols1,all_cols2)) return false;
+		var key_cols1 = this.local.getPrimaryKey();
+		var key_cols2 = this.remote.getPrimaryKey();
+		if(!this.equalArray(key_cols1,key_cols2)) return false;
+		if(key_cols1.length == 0) return false;
+		return true;
+	}
+	,denull: function(x) {
+		if(x == null) return -1;
+		return x;
+	}
+	,link: function() {
+		var i0 = this.denull(this.db.get(0));
+		var i1 = this.denull(this.db.get(1));
+		if(i0 == -3) {
+			i0 = this.at0;
+			this.at0++;
+		}
+		if(i1 == -3) {
+			i1 = this.at1;
+			this.at1++;
+		}
+		var factor;
+		if(i0 >= 0 && i1 >= 0) factor = 2; else factor = 1;
+		var offset = factor - 1;
+		if(i0 >= 0) {
+			var _g1 = 0;
+			var _g = this.local.get_width();
+			while(_g1 < _g) {
+				var x = _g1++;
+				this.local.setCellCache(x,i0,this.db.get(2 + factor * x));
+			}
+		}
+		if(i1 >= 0) {
+			var _g11 = 0;
+			var _g2 = this.remote.get_width();
+			while(_g11 < _g2) {
+				var x1 = _g11++;
+				this.remote.setCellCache(x1,i1,this.db.get(2 + factor * x1 + offset));
+			}
+		}
+		this.align.link(i0,i1);
+		this.align.addToOrder(i0,i1);
+	}
+	,linkQuery: function(query,order) {
+		if(this.db.begin(query,null,order)) {
+			while(this.db.read()) this.link();
+			this.db.end();
+		}
+	}
+	,apply: function() {
+		if(this.db == null) return null;
+		if(!this.validateSchema()) return null;
+		var rowid_name = this.db.rowid();
+		this.align = new coopy.Alignment();
+		var key_cols = this.local.getPrimaryKey();
+		var data_cols = this.local.getAllButPrimaryKey();
+		var all_cols = this.local.getColumnNames();
+		this.align.meta = new coopy.Alignment();
+		var _g1 = 0;
+		var _g = all_cols.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			this.align.meta.link(i,i);
+		}
+		this.align.meta.range(all_cols.length,all_cols.length);
+		this.align.tables(this.local,this.remote);
+		this.align.range(999,999);
+		var sql_table1 = this.local.getQuotedTableName();
+		var sql_table2 = this.remote.getQuotedTableName();
+		var sql_key_cols = "";
+		var _g11 = 0;
+		var _g2 = key_cols.length;
+		while(_g11 < _g2) {
+			var i1 = _g11++;
+			if(i1 > 0) sql_key_cols += ",";
+			sql_key_cols += this.local.getQuotedColumnName(key_cols[i1]);
+		}
+		var sql_all_cols = "";
+		var _g12 = 0;
+		var _g3 = all_cols.length;
+		while(_g12 < _g3) {
+			var i2 = _g12++;
+			if(i2 > 0) sql_all_cols += ",";
+			sql_all_cols += this.local.getQuotedColumnName(all_cols[i2]);
+		}
+		var sql_key_match = "";
+		var _g13 = 0;
+		var _g4 = key_cols.length;
+		while(_g13 < _g4) {
+			var i3 = _g13++;
+			if(i3 > 0) sql_key_match += " AND ";
+			var n = this.local.getQuotedColumnName(key_cols[i3]);
+			sql_key_match += sql_table1 + "." + n + " IS " + sql_table2 + "." + n;
+		}
+		var sql_data_mismatch = "";
+		var _g14 = 0;
+		var _g5 = data_cols.length;
+		while(_g14 < _g5) {
+			var i4 = _g14++;
+			if(i4 > 0) sql_data_mismatch += " OR ";
+			var n1 = this.local.getQuotedColumnName(data_cols[i4]);
+			sql_data_mismatch += sql_table1 + "." + n1 + " IS NOT " + sql_table2 + "." + n1;
+		}
+		var sql_dbl_cols = "";
+		var dbl_cols = [];
+		var _g15 = 0;
+		var _g6 = all_cols.length;
+		while(_g15 < _g6) {
+			var i5 = _g15++;
+			if(i5 > 0) sql_dbl_cols += ",";
+			var n2 = this.local.getQuotedColumnName(all_cols[i5]);
+			var buf = "__coopy_" + i5;
+			sql_dbl_cols += sql_table1 + "." + n2 + " AS " + buf;
+			dbl_cols.push(buf);
+			sql_dbl_cols += ",";
+			sql_dbl_cols += sql_table2 + "." + n2 + " AS " + buf + "b";
+			dbl_cols.push(buf + "b");
+		}
+		var sql_order = "";
+		var _g16 = 0;
+		var _g7 = key_cols.length;
+		while(_g16 < _g7) {
+			var i6 = _g16++;
+			if(i6 > 0) sql_order += ",";
+			var n3 = this.local.getQuotedColumnName(key_cols[i6]);
+			sql_order += n3;
+		}
+		var sql_dbl_order = "";
+		var _g17 = 0;
+		var _g8 = key_cols.length;
+		while(_g17 < _g8) {
+			var i7 = _g17++;
+			if(i7 > 0) sql_dbl_order += ",";
+			var n4 = this.local.getQuotedColumnName(key_cols[i7]);
+			sql_dbl_order += sql_table1 + "." + n4;
+		}
+		var rowid = "-3";
+		var rowid1 = "-3";
+		var rowid2 = "-3";
+		if(rowid_name != null) {
+			rowid = rowid_name;
+			rowid1 = sql_table1 + "." + rowid_name;
+			rowid2 = sql_table2 + "." + rowid_name;
+		}
+		var sql_inserts = "SELECT DISTINCT NULL, " + rowid + " AS rowid, " + sql_all_cols + " FROM " + sql_table2 + " WHERE NOT EXISTS (SELECT 1 FROM " + sql_table1 + " WHERE " + sql_key_match + ")";
+		var sql_inserts_order = ["NULL","rowid"].concat(all_cols);
+		var sql_updates = "SELECT DISTINCT " + rowid1 + " AS __coopy_rowid0, " + rowid2 + " AS __coopy_rowid1, " + sql_dbl_cols + " FROM " + sql_table1 + " INNER JOIN " + sql_table2 + " ON " + sql_key_match + " WHERE " + sql_data_mismatch;
+		var sql_updates_order = ["__coopy_rowid0","__coopy_rowid1"].concat(dbl_cols);
+		var sql_deletes = "SELECT DISTINCT " + rowid + " AS rowid, NULL, " + sql_all_cols + " FROM " + sql_table1 + " WHERE NOT EXISTS (SELECT 1 FROM " + sql_table2 + " WHERE " + sql_key_match + ")";
+		var sql_deletes_order = ["rowid","NULL"].concat(all_cols);
+		this.at0 = 1;
+		this.at1 = 1;
+		this.linkQuery(sql_inserts,sql_inserts_order);
+		this.linkQuery(sql_updates,sql_updates_order);
+		this.linkQuery(sql_deletes,sql_deletes_order);
+		return this.align;
+	}
+	,__class__: coopy.SqlCompare
+};
+coopy.SqlDatabase = function() { };
+coopy.SqlDatabase.__name__ = true;
+coopy.SqlDatabase.prototype = {
+	__class__: coopy.SqlDatabase
+};
+coopy.SqlHelper = function() { };
+coopy.SqlHelper.__name__ = true;
+coopy.SqlHelper.prototype = {
+	__class__: coopy.SqlHelper
+};
+coopy.SqlTable = $hx_exports.coopy.SqlTable = function(db,name,helper) {
+	this.db = db;
+	this.name = name;
+	this.helper = helper;
+	this.cache = new haxe.ds.IntMap();
+	this.h = -1;
+	this.id2rid = null;
+	this.getColumns();
+};
+coopy.SqlTable.__name__ = true;
+coopy.SqlTable.__interfaces__ = [coopy.Table];
+coopy.SqlTable.prototype = {
+	getColumns: function() {
+		if(this.columns != null) return;
+		if(this.db == null) return;
+		this.columns = this.db.getColumns(this.name);
+		this.columnNames = new Array();
+		var _g = 0;
+		var _g1 = this.columns;
+		while(_g < _g1.length) {
+			var col = _g1[_g];
+			++_g;
+			this.columnNames.push(col.getName());
+		}
+	}
+	,getPrimaryKey: function() {
+		this.getColumns();
+		var result = new Array();
+		var _g = 0;
+		var _g1 = this.columns;
+		while(_g < _g1.length) {
+			var col = _g1[_g];
+			++_g;
+			if(!col.isPrimaryKey()) continue;
+			result.push(col.getName());
+		}
+		return result;
+	}
+	,getAllButPrimaryKey: function() {
+		this.getColumns();
+		var result = new Array();
+		var _g = 0;
+		var _g1 = this.columns;
+		while(_g < _g1.length) {
+			var col = _g1[_g];
+			++_g;
+			if(col.isPrimaryKey()) continue;
+			result.push(col.getName());
+		}
+		return result;
+	}
+	,getColumnNames: function() {
+		this.getColumns();
+		return this.columnNames;
+	}
+	,getQuotedTableName: function() {
+		if(this.quotedTableName != null) return this.quotedTableName;
+		this.quotedTableName = this.db.getQuotedTableName(this.name);
+		return this.quotedTableName;
+	}
+	,getQuotedColumnName: function(name) {
+		return this.db.getQuotedColumnName(name);
+	}
+	,getCell: function(x,y) {
+		if(this.h >= 0) {
+			y = y - 1;
+			if(y >= 0) y = this.id2rid[y];
+		}
+		if(y < 0) {
+			this.getColumns();
+			return this.columns[x].name;
+		}
+		var row = this.cache.get(y);
+		if(row == null) {
+			row = new haxe.ds.IntMap();
+			this.getColumns();
+			this.db.beginRow(this.name,y,this.columnNames);
+			while(this.db.read()) {
+				var _g1 = 0;
+				var _g = this.get_width();
+				while(_g1 < _g) {
+					var i = _g1++;
+					var v = this.db.get(i);
+					row.set(i,v);
+					v;
+				}
+			}
+			this.db.end();
+			this.cache.set(y,row);
+			row;
+		}
+		var this1 = this.cache.get(y);
+		return this1.get(x);
+	}
+	,setCellCache: function(x,y,c) {
+		var row = this.cache.get(y);
+		if(row == null) {
+			row = new haxe.ds.IntMap();
+			this.getColumns();
+			this.cache.set(y,row);
+			row;
+		}
+		var v = c;
+		row.set(x,v);
+		v;
+	}
+	,setCell: function(x,y,c) {
+		console.log("SqlTable cannot set cells yet");
+	}
+	,getCellView: function() {
+		return new coopy.SimpleView();
+	}
+	,isResizable: function() {
+		return false;
+	}
+	,resize: function(w,h) {
+		return false;
+	}
+	,clear: function() {
+	}
+	,insertOrDeleteRows: function(fate,hfate) {
+		return false;
+	}
+	,insertOrDeleteColumns: function(fate,wfate) {
+		return false;
+	}
+	,trimBlank: function() {
+		return false;
+	}
+	,get_width: function() {
+		this.getColumns();
+		return this.columns.length;
+	}
+	,get_height: function() {
+		if(this.h >= 0) return this.h;
+		if(this.helper == null) return -1;
+		this.id2rid = this.helper.getRowIDs(this.db,this.name);
+		this.h = this.id2rid.length + 1;
+		return this.h;
+	}
+	,getData: function() {
+		return null;
+	}
+	,clone: function() {
+		return null;
+	}
+	,__class__: coopy.SqlTable
+};
+coopy.SqlTableName = $hx_exports.coopy.SqlTableName = function(name,prefix) {
+	if(prefix == null) prefix = "";
+	if(name == null) name = "";
+	this.name = name;
+	this.prefix = prefix;
+};
+coopy.SqlTableName.__name__ = true;
+coopy.SqlTableName.prototype = {
+	toString: function() {
+		if(this.prefix == "") return this.name;
+		return this.prefix + "." + this.name;
+	}
+	,__class__: coopy.SqlTableName
+};
+coopy.SqliteHelper = function() {
+};
+coopy.SqliteHelper.__name__ = true;
+coopy.SqliteHelper.__interfaces__ = [coopy.SqlHelper];
+coopy.SqliteHelper.prototype = {
+	getTableNames: function(db) {
+		var q = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
+		if(!db.begin(q,null,["name"])) return null;
+		var names = new Array();
+		while(db.read()) names.push(db.get(0));
+		db.end();
+		return names;
+	}
+	,countRows: function(db,name) {
+		var q = "SELECT COUNT(*) AS ct FROM " + db.getQuotedTableName(name);
+		if(!db.begin(q,null,["ct"])) return -1;
+		var ct = -1;
+		while(db.read()) ct = db.get(0);
+		db.end();
+		return ct;
+	}
+	,getRowIDs: function(db,name) {
+		var result = new Array();
+		var q = "SELECT ROWID AS r FROM " + db.getQuotedTableName(name) + " ORDER BY ROWID";
+		if(!db.begin(q,null,["r"])) return null;
+		while(db.read()) {
+			var c = db.get(0);
+			result.push(c);
+		}
+		db.end();
+		return result;
+	}
+	,__class__: coopy.SqliteHelper
 };
 coopy.TableComparisonState = $hx_exports.coopy.TableComparisonState = function() {
 	this.reset();
@@ -3073,6 +3850,7 @@ coopy.TableComparisonState.prototype = {
 		this.has_same_columns_known = false;
 		this.compare_flags = null;
 	}
+	,__class__: coopy.TableComparisonState
 };
 coopy.TableDiff = $hx_exports.coopy.TableDiff = function(align,flags) {
 	this.align = align;
@@ -3228,7 +4006,9 @@ coopy.TableDiff.prototype = {
 	}
 	,hilite: function(output) {
 		if(!output.isResizable()) return false;
-		if(this.builder == null) this.builder = new coopy.FlatCellBuilder();
+		if(this.builder == null) {
+			if(this.flags.allow_nested_cells) this.builder = new coopy.NestedCellBuilder(); else this.builder = new coopy.FlatCellBuilder();
+		}
 		output.resize(0,0);
 		output.clear();
 		var row_map = new haxe.ds.IntMap();
@@ -3276,7 +4056,8 @@ coopy.TableDiff.prototype = {
 			a = this.align.getSource();
 			b = this.align.getTarget();
 			p = a;
-			rp_header = ra_header = this.align.meta.getSourceHeader();
+			ra_header = this.align.meta.getSourceHeader();
+			rp_header = ra_header;
 			rb_header = this.align.meta.getTargetHeader();
 			if(this.align.getIndexColumns() != null) {
 				var _g3 = 0;
@@ -3435,9 +4216,9 @@ coopy.TableDiff.prototype = {
 				var j3 = _g110++;
 				var cunit2 = column_units[j3];
 				if(cunit2.r >= 0) {
-					if(b.get_height() > 0) output.setCell(j3 + 1,at1,b.getCell(cunit2.r,rb_header));
+					if(b.get_height() != 0) output.setCell(j3 + 1,at1,b.getCell(cunit2.r,rb_header));
 				} else if(cunit2.lp() >= 0) {
-					if(p.get_height() > 0) output.setCell(j3 + 1,at1,p.getCell(cunit2.lp(),rp_header));
+					if(p.get_height() != 0) output.setCell(j3 + 1,at1,p.getCell(cunit2.lp(),rp_header));
 				}
 				col_map.set(j3 + 1,cunit2);
 			}
@@ -3645,7 +4426,10 @@ coopy.TableDiff.prototype = {
 			while(_g114 < _g25) {
 				var i7 = _g114++;
 				var unit2 = row_map.get(i7);
-				if(unit2 == null) continue;
+				if(unit2 == null) {
+					output.setCell(0,i7,"");
+					continue;
+				}
 				output.setCell(0,i7,this.builder.links(unit2));
 			}
 			target = new Array();
@@ -3661,7 +4445,10 @@ coopy.TableDiff.prototype = {
 			while(_g116 < _g27) {
 				var i9 = _g116++;
 				var unit3 = col_map.get(i9 - 1);
-				if(unit3 == null) continue;
+				if(unit3 == null) {
+					output.setCell(i9,0,"");
+					continue;
+				}
 				output.setCell(i9,0,this.builder.links(unit3));
 			}
 			output.setCell(0,0,this.builder.marker("@:@"));
@@ -3715,6 +4502,7 @@ coopy.TableDiff.prototype = {
 		}
 		return true;
 	}
+	,__class__: coopy.TableDiff
 };
 coopy.TableIO = $hx_exports.coopy.TableIO = function() {
 };
@@ -3742,6 +4530,10 @@ coopy.TableIO.prototype = {
 	,exists: function(path) {
 		return false;
 	}
+	,openSqliteDatabase: function(path) {
+		return null;
+	}
+	,__class__: coopy.TableIO
 };
 coopy.TableModifier = $hx_exports.coopy.TableModifier = function(t) {
 	this.t = t;
@@ -3758,69 +4550,134 @@ coopy.TableModifier.prototype = {
 		}
 		return this.t.insertOrDeleteColumns(fate,this.t.get_width() - 1);
 	}
-};
-coopy.TableText = $hx_exports.coopy.TableText = function(tab) {
-	this.tab = tab;
-	this.view = tab.getCellView();
-};
-coopy.TableText.__name__ = true;
-coopy.TableText.prototype = {
-	getCellText: function(x,y) {
-		return this.view.toString(this.tab.getCell(x,y));
-	}
+	,__class__: coopy.TableModifier
 };
 coopy.TerminalDiffRender = function() {
+	this.align_columns = true;
 };
 coopy.TerminalDiffRender.__name__ = true;
 coopy.TerminalDiffRender.prototype = {
-	render: function(t) {
-		var csv = new coopy.Csv();
+	alignColumns: function(enable) {
+		this.align_columns = enable;
+	}
+	,render: function(t) {
+		this.csv = new coopy.Csv();
 		var result = "";
 		var w = t.get_width();
 		var h = t.get_height();
 		var txt = "";
-		var v = t.getCellView();
-		var tt = new coopy.TableText(t);
-		var codes = new haxe.ds.StringMap();
-		codes.set("header","\x1B[0;1m");
-		codes.set("spec","\x1B[35;1m");
-		codes.set("add","\x1B[32;1m");
-		codes.set("conflict","\x1B[33;1m");
-		codes.set("modify","\x1B[34;1m");
-		codes.set("remove","\x1B[31;1m");
-		codes.set("minor","\x1B[2m");
-		codes.set("done","\x1B[0m");
+		this.t = t;
+		this.v = t.getCellView();
+		this.codes = new haxe.ds.StringMap();
+		this.codes.set("header","\x1B[0;1m");
+		this.codes.set("spec","\x1B[35;1m");
+		this.codes.set("add","\x1B[32;1m");
+		this.codes.set("conflict","\x1B[33;1m");
+		this.codes.set("modify","\x1B[34;1m");
+		this.codes.set("remove","\x1B[31;1m");
+		this.codes.set("minor","\x1B[2m");
+		this.codes.set("done","\x1B[0m");
+		var sizes = null;
+		if(this.align_columns) sizes = this.pickSizes(t);
 		var _g = 0;
 		while(_g < h) {
 			var y = _g++;
 			var _g1 = 0;
 			while(_g1 < w) {
 				var x = _g1++;
-				if(x > 0) txt += codes.get("minor") + "," + codes.get("done");
-				var val = tt.getCellText(x,y);
-				if(val == null) val = "";
-				var cell = coopy.DiffRender.renderCell(tt,x,y);
-				var code = null;
-				if(cell.category != null) code = codes.get(cell.category);
-				if(cell.category_given_tr != null) {
-					var code_tr = codes.get(cell.category_given_tr);
-					if(code_tr != null) code = code_tr;
-				}
-				if(code != null) {
-					if(cell.rvalue != null) {
-						val = codes.get("remove") + cell.lvalue + codes.get("modify") + cell.pretty_separator + codes.get("add") + cell.rvalue + codes.get("done");
-						if(cell.pvalue != null) val = codes.get("conflict") + cell.pvalue + codes.get("modify") + cell.pretty_separator + val;
-					} else {
-						val = cell.pretty_value;
-						val = code + val + codes.get("done");
+				if(x > 0) txt += this.codes.get("minor") + "," + this.codes.get("done");
+				txt += this.getText(x,y,true);
+				if(sizes != null) {
+					var bit = this.getText(x,y,false);
+					var _g3 = 0;
+					var _g2 = sizes[x] - bit.length;
+					while(_g3 < _g2) {
+						var i = _g3++;
+						txt += " ";
 					}
 				}
-				txt += csv.renderCell(v,val);
 			}
 			txt += "\r\n";
 		}
+		this.t = null;
+		this.v = null;
+		this.csv = null;
+		this.codes = null;
 		return txt;
 	}
+	,getText: function(x,y,color) {
+		var val = this.t.getCell(x,y);
+		var cell = coopy.DiffRender.renderCell(this.t,this.v,x,y);
+		if(color) {
+			var code = null;
+			if(cell.category != null) code = this.codes.get(cell.category);
+			if(cell.category_given_tr != null) {
+				var code_tr = this.codes.get(cell.category_given_tr);
+				if(code_tr != null) code = code_tr;
+			}
+			if(code != null) {
+				if(cell.rvalue != null) {
+					val = this.codes.get("remove") + cell.lvalue + this.codes.get("modify") + cell.pretty_separator + this.codes.get("add") + cell.rvalue + this.codes.get("done");
+					if(cell.pvalue != null) val = this.codes.get("conflict") + cell.pvalue + this.codes.get("modify") + cell.pretty_separator + Std.string(val);
+				} else {
+					val = cell.pretty_value;
+					val = code + Std.string(val) + this.codes.get("done");
+				}
+			}
+		} else val = cell.pretty_value;
+		return this.csv.renderCell(this.v,val);
+	}
+	,pickSizes: function(t) {
+		var w = t.get_width();
+		var h = t.get_height();
+		var v = t.getCellView();
+		var csv = new coopy.Csv();
+		var sizes = new Array();
+		var row = -1;
+		var total = w - 1;
+		var _g = 0;
+		while(_g < w) {
+			var x = _g++;
+			var m = 0;
+			var m2 = 0;
+			var mmax = 0;
+			var mmostmax = 0;
+			var mmin = -1;
+			var _g1 = 0;
+			while(_g1 < h) {
+				var y = _g1++;
+				var txt = this.getText(x,y,false);
+				if(txt == "@@" && row == -1) row = y;
+				var len = txt.length;
+				if(y == row) mmin = len;
+				m += len;
+				m2 += len * len;
+				if(len > mmax) mmax = len;
+			}
+			var mean = m / h;
+			var stddev = Math.sqrt(m2 / h - mean * mean);
+			var most = mean + stddev * 2 + 0.5 | 0;
+			var _g11 = 0;
+			while(_g11 < h) {
+				var y1 = _g11++;
+				var txt1 = this.getText(x,y1,false);
+				var len1 = txt1.length;
+				if(len1 <= most) {
+					if(len1 > mmostmax) mmostmax = len1;
+				}
+			}
+			var full = mmax;
+			most = mmostmax;
+			if(mmin != -1) {
+				if(most < mmin) most = mmin;
+			}
+			sizes.push(most);
+			total += most;
+		}
+		if(total > 130) return null;
+		return sizes;
+	}
+	,__class__: coopy.TerminalDiffRender
 };
 coopy.Unit = function(l,r,p) {
 	if(p == null) p = -2;
@@ -3866,6 +4723,7 @@ coopy.Unit.prototype = {
 		}
 		return false;
 	}
+	,__class__: coopy.Unit
 };
 coopy.Viterbi = $hx_exports.coopy.Viterbi = function() {
 	this.K = this.T = 0;
@@ -3991,10 +4849,19 @@ coopy.Viterbi.prototype = {
 		this.calculatePath();
 		return this.best_cost;
 	}
+	,__class__: coopy.Viterbi
 };
 var haxe = {};
 haxe.IMap = function() { };
 haxe.IMap.__name__ = true;
+haxe.IMap.prototype = {
+	__class__: haxe.IMap
+};
+haxe.Json = function() { };
+haxe.Json.__name__ = true;
+haxe.Json.stringify = function(value,replacer,space) {
+	return haxe.format.JsonPrinter.print(value,replacer,space);
+};
 haxe.ds = {};
 haxe.ds.IntMap = function() {
 	this.h = { };
@@ -4037,6 +4904,7 @@ haxe.ds.IntMap.prototype = {
 		s.b += "}";
 		return s.b;
 	}
+	,__class__: haxe.ds.IntMap
 };
 haxe.ds.StringMap = function() {
 	this.h = { };
@@ -4068,10 +4936,381 @@ haxe.ds.StringMap.prototype = {
 			return this.ref["$" + i];
 		}};
 	}
+	,__class__: haxe.ds.StringMap
+};
+haxe.format = {};
+haxe.format.JsonParser = function(str) {
+	this.str = str;
+	this.pos = 0;
+};
+haxe.format.JsonParser.__name__ = true;
+haxe.format.JsonParser.prototype = {
+	parseRec: function() {
+		while(true) {
+			var c = StringTools.fastCodeAt(this.str,this.pos++);
+			switch(c) {
+			case 32:case 13:case 10:case 9:
+				break;
+			case 123:
+				var obj = { };
+				var field = null;
+				var comma = null;
+				while(true) {
+					var c1 = StringTools.fastCodeAt(this.str,this.pos++);
+					switch(c1) {
+					case 32:case 13:case 10:case 9:
+						break;
+					case 125:
+						if(field != null || comma == false) this.invalidChar();
+						return obj;
+					case 58:
+						if(field == null) this.invalidChar();
+						Reflect.setField(obj,field,this.parseRec());
+						field = null;
+						comma = true;
+						break;
+					case 44:
+						if(comma) comma = false; else this.invalidChar();
+						break;
+					case 34:
+						if(comma) this.invalidChar();
+						field = this.parseString();
+						break;
+					default:
+						this.invalidChar();
+					}
+				}
+				break;
+			case 91:
+				var arr = [];
+				var comma1 = null;
+				while(true) {
+					var c2 = StringTools.fastCodeAt(this.str,this.pos++);
+					switch(c2) {
+					case 32:case 13:case 10:case 9:
+						break;
+					case 93:
+						if(comma1 == false) this.invalidChar();
+						return arr;
+					case 44:
+						if(comma1) comma1 = false; else this.invalidChar();
+						break;
+					default:
+						if(comma1) this.invalidChar();
+						this.pos--;
+						arr.push(this.parseRec());
+						comma1 = true;
+					}
+				}
+				break;
+			case 116:
+				var save = this.pos;
+				if(StringTools.fastCodeAt(this.str,this.pos++) != 114 || StringTools.fastCodeAt(this.str,this.pos++) != 117 || StringTools.fastCodeAt(this.str,this.pos++) != 101) {
+					this.pos = save;
+					this.invalidChar();
+				}
+				return true;
+			case 102:
+				var save1 = this.pos;
+				if(StringTools.fastCodeAt(this.str,this.pos++) != 97 || StringTools.fastCodeAt(this.str,this.pos++) != 108 || StringTools.fastCodeAt(this.str,this.pos++) != 115 || StringTools.fastCodeAt(this.str,this.pos++) != 101) {
+					this.pos = save1;
+					this.invalidChar();
+				}
+				return false;
+			case 110:
+				var save2 = this.pos;
+				if(StringTools.fastCodeAt(this.str,this.pos++) != 117 || StringTools.fastCodeAt(this.str,this.pos++) != 108 || StringTools.fastCodeAt(this.str,this.pos++) != 108) {
+					this.pos = save2;
+					this.invalidChar();
+				}
+				return null;
+			case 34:
+				return this.parseString();
+			case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 56:case 57:case 45:
+				return this.parseNumber(c);
+			default:
+				this.invalidChar();
+			}
+		}
+	}
+	,parseString: function() {
+		var start = this.pos;
+		var buf_b = "";
+		while(true) {
+			var c = StringTools.fastCodeAt(this.str,this.pos++);
+			if(c == 34) break;
+			if(c == 92) {
+				buf_b += HxOverrides.substr(this.str,start,this.pos - start - 1);
+				c = StringTools.fastCodeAt(this.str,this.pos++);
+				switch(c) {
+				case 114:
+					buf_b += "\r";
+					break;
+				case 110:
+					buf_b += "\n";
+					break;
+				case 116:
+					buf_b += "\t";
+					break;
+				case 98:
+					buf_b += "\x08";
+					break;
+				case 102:
+					buf_b += "\x0C";
+					break;
+				case 47:case 92:case 34:
+					buf_b += String.fromCharCode(c);
+					break;
+				case 117:
+					var uc = Std.parseInt("0x" + HxOverrides.substr(this.str,this.pos,4));
+					this.pos += 4;
+					buf_b += String.fromCharCode(uc);
+					break;
+				default:
+					throw "Invalid escape sequence \\" + String.fromCharCode(c) + " at position " + (this.pos - 1);
+				}
+				start = this.pos;
+			} else if(c != c) throw "Unclosed string";
+		}
+		buf_b += HxOverrides.substr(this.str,start,this.pos - start - 1);
+		return buf_b;
+	}
+	,parseNumber: function(c) {
+		var start = this.pos - 1;
+		var minus = c == 45;
+		var digit = !minus;
+		var zero = c == 48;
+		var point = false;
+		var e = false;
+		var pm = false;
+		var end = false;
+		while(true) {
+			c = StringTools.fastCodeAt(this.str,this.pos++);
+			switch(c) {
+			case 48:
+				if(zero && !point) this.invalidNumber(start);
+				if(minus) {
+					minus = false;
+					zero = true;
+				}
+				digit = true;
+				break;
+			case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 56:case 57:
+				if(zero && !point) this.invalidNumber(start);
+				if(minus) minus = false;
+				digit = true;
+				zero = false;
+				break;
+			case 46:
+				if(minus || point) this.invalidNumber(start);
+				digit = false;
+				point = true;
+				break;
+			case 101:case 69:
+				if(minus || zero || e) this.invalidNumber(start);
+				digit = false;
+				e = true;
+				break;
+			case 43:case 45:
+				if(!e || pm) this.invalidNumber(start);
+				digit = false;
+				pm = true;
+				break;
+			default:
+				if(!digit) this.invalidNumber(start);
+				this.pos--;
+				end = true;
+			}
+			if(end) break;
+		}
+		var f = Std.parseFloat(HxOverrides.substr(this.str,start,this.pos - start));
+		var i = f | 0;
+		if(i == f) return i; else return f;
+	}
+	,invalidChar: function() {
+		this.pos--;
+		throw "Invalid char " + this.str.charCodeAt(this.pos) + " at position " + this.pos;
+	}
+	,invalidNumber: function(start) {
+		throw "Invalid number at position " + start + ": " + HxOverrides.substr(this.str,start,this.pos - start);
+	}
+	,__class__: haxe.format.JsonParser
+};
+haxe.format.JsonPrinter = function(replacer,space) {
+	this.replacer = replacer;
+	this.indent = space;
+	this.pretty = space != null;
+	this.nind = 0;
+	this.buf = new StringBuf();
+};
+haxe.format.JsonPrinter.__name__ = true;
+haxe.format.JsonPrinter.print = function(o,replacer,space) {
+	var printer = new haxe.format.JsonPrinter(replacer,space);
+	printer.write("",o);
+	return printer.buf.b;
+};
+haxe.format.JsonPrinter.prototype = {
+	ipad: function() {
+		if(this.pretty) {
+			var v = StringTools.lpad("",this.indent,this.nind * this.indent.length);
+			if(v == null) this.buf.b += "null"; else this.buf.b += "" + v;
+		}
+	}
+	,write: function(k,v) {
+		if(this.replacer != null) v = this.replacer(k,v);
+		{
+			var _g = Type["typeof"](v);
+			switch(_g[1]) {
+			case 8:
+				this.buf.b += "\"???\"";
+				break;
+			case 4:
+				this.fieldsString(v,Reflect.fields(v));
+				break;
+			case 1:
+				var v1 = v;
+				if(v1 == null) this.buf.b += "null"; else this.buf.b += "" + v1;
+				break;
+			case 2:
+				var v2;
+				if((function($this) {
+					var $r;
+					var f = v;
+					$r = isFinite(f);
+					return $r;
+				}(this))) v2 = v; else v2 = "null";
+				if(v2 == null) this.buf.b += "null"; else this.buf.b += "" + v2;
+				break;
+			case 5:
+				this.buf.b += "\"<fun>\"";
+				break;
+			case 6:
+				var c = _g[2];
+				if(c == String) this.quote(v); else if(c == Array) {
+					var v3 = v;
+					this.buf.b += "[";
+					var len = v3.length;
+					var last = len - 1;
+					var _g1 = 0;
+					while(_g1 < len) {
+						var i = _g1++;
+						if(i > 0) this.buf.b += ","; else this.nind++;
+						if(this.pretty) this.buf.b += "\n";
+						this.ipad();
+						this.write(i,v3[i]);
+						if(i == last) {
+							this.nind--;
+							if(this.pretty) this.buf.b += "\n";
+							this.ipad();
+						}
+					}
+					this.buf.b += "]";
+				} else if(c == haxe.ds.StringMap) {
+					var v4 = v;
+					var o = { };
+					var $it0 = v4.keys();
+					while( $it0.hasNext() ) {
+						var k1 = $it0.next();
+						Reflect.setField(o,k1,v4.get(k1));
+					}
+					this.fieldsString(o,Reflect.fields(o));
+				} else if(c == Date) {
+					var v5 = v;
+					this.quote(HxOverrides.dateStr(v5));
+				} else this.fieldsString(v,Reflect.fields(v));
+				break;
+			case 7:
+				var i1 = Type.enumIndex(v);
+				var v6 = i1;
+				if(v6 == null) this.buf.b += "null"; else this.buf.b += "" + v6;
+				break;
+			case 3:
+				var v7 = v;
+				if(v7 == null) this.buf.b += "null"; else this.buf.b += "" + v7;
+				break;
+			case 0:
+				this.buf.b += "null";
+				break;
+			}
+		}
+	}
+	,fieldsString: function(v,fields) {
+		this.buf.b += "{";
+		var len = fields.length;
+		var last = len - 1;
+		var first = true;
+		var _g = 0;
+		while(_g < len) {
+			var i = _g++;
+			var f = fields[i];
+			var value = Reflect.field(v,f);
+			if(Reflect.isFunction(value)) continue;
+			if(first) {
+				this.nind++;
+				first = false;
+			} else this.buf.b += ",";
+			if(this.pretty) this.buf.b += "\n";
+			this.ipad();
+			this.quote(f);
+			this.buf.b += ":";
+			if(this.pretty) this.buf.b += " ";
+			this.write(f,value);
+			if(i == last) {
+				this.nind--;
+				if(this.pretty) this.buf.b += "\n";
+				this.ipad();
+			}
+		}
+		this.buf.b += "}";
+	}
+	,quote: function(s) {
+		this.buf.b += "\"";
+		var i = 0;
+		while(true) {
+			var c = StringTools.fastCodeAt(s,i++);
+			if(c != c) break;
+			switch(c) {
+			case 34:
+				this.buf.b += "\\\"";
+				break;
+			case 92:
+				this.buf.b += "\\\\";
+				break;
+			case 10:
+				this.buf.b += "\\n";
+				break;
+			case 13:
+				this.buf.b += "\\r";
+				break;
+			case 9:
+				this.buf.b += "\\t";
+				break;
+			case 8:
+				this.buf.b += "\\b";
+				break;
+			case 12:
+				this.buf.b += "\\f";
+				break;
+			default:
+				this.buf.b += String.fromCharCode(c);
+			}
+		}
+		this.buf.b += "\"";
+	}
+	,__class__: haxe.format.JsonPrinter
 };
 var js = {};
 js.Boot = function() { };
 js.Boot.__name__ = true;
+js.Boot.getClass = function(o) {
+	if((o instanceof Array) && o.__enum__ == null) return Array; else {
+		var cl = o.__class__;
+		if(cl != null) return cl;
+		var name = js.Boot.__nativeClassName(o);
+		if(name != null) return js.Boot.__resolveNativeClass(name);
+		return null;
+	}
+};
 js.Boot.__string_rec = function(o,s) {
 	if(o == null) return "null";
 	if(s.length >= 5) return "<...>";
@@ -4139,12 +5378,79 @@ js.Boot.__string_rec = function(o,s) {
 		return String(o);
 	}
 };
+js.Boot.__interfLoop = function(cc,cl) {
+	if(cc == null) return false;
+	if(cc == cl) return true;
+	var intf = cc.__interfaces__;
+	if(intf != null) {
+		var _g1 = 0;
+		var _g = intf.length;
+		while(_g1 < _g) {
+			var i = _g1++;
+			var i1 = intf[i];
+			if(i1 == cl || js.Boot.__interfLoop(i1,cl)) return true;
+		}
+	}
+	return js.Boot.__interfLoop(cc.__super__,cl);
+};
+js.Boot.__instanceof = function(o,cl) {
+	if(cl == null) return false;
+	switch(cl) {
+	case Int:
+		return (o|0) === o;
+	case Float:
+		return typeof(o) == "number";
+	case Bool:
+		return typeof(o) == "boolean";
+	case String:
+		return typeof(o) == "string";
+	case Array:
+		return (o instanceof Array) && o.__enum__ == null;
+	case Dynamic:
+		return true;
+	default:
+		if(o != null) {
+			if(typeof(cl) == "function") {
+				if(o instanceof cl) return true;
+				if(js.Boot.__interfLoop(js.Boot.getClass(o),cl)) return true;
+			} else if(typeof(cl) == "object" && js.Boot.__isNativeObj(cl)) {
+				if(o instanceof cl) return true;
+			}
+		} else return false;
+		if(cl == Class && o.__name__ != null) return true;
+		if(cl == Enum && o.__ename__ != null) return true;
+		return o.__enum__ == cl;
+	}
+};
+js.Boot.__nativeClassName = function(o) {
+	var name = js.Boot.__toStr.call(o).slice(8,-1);
+	if(name == "Object" || name == "Function" || name == "Math" || name == "JSON") return null;
+	return name;
+};
+js.Boot.__isNativeObj = function(o) {
+	return js.Boot.__nativeClassName(o) != null;
+};
+js.Boot.__resolveNativeClass = function(name) {
+	if(typeof window != "undefined") return window[name]; else return global[name];
+};
 function $iterator(o) { if( o instanceof Array ) return function() { return HxOverrides.iter(o); }; return typeof(o.iterator) == 'function' ? $bind(o,o.iterator) : o.iterator; }
 var $_, $fid = 0;
 function $bind(o,m) { if( m == null ) return null; if( m.__id__ == null ) m.__id__ = $fid++; var f; if( o.hx__closures__ == null ) o.hx__closures__ = {}; else f = o.hx__closures__[m.__id__]; if( f == null ) { f = function(){ return f.method.apply(f.scope, arguments); }; f.scope = o; f.method = m; o.hx__closures__[m.__id__] = f; } return f; }
+String.prototype.__class__ = String;
 String.__name__ = true;
 Array.__name__ = true;
-coopy.Coopy.VERSION = "1.2.1";
+Date.prototype.__class__ = Date;
+Date.__name__ = ["Date"];
+var Int = { __name__ : ["Int"]};
+var Dynamic = { __name__ : ["Dynamic"]};
+var Float = Number;
+Float.__name__ = ["Float"];
+var Bool = Boolean;
+Bool.__ename__ = ["Bool"];
+var Class = { __name__ : ["Class"]};
+var Enum = { };
+coopy.Coopy.VERSION = "1.2.3";
+js.Boot.__toStr = {}.toString;
 coopy.Coopy.main();
 })(typeof window != "undefined" ? window : exports);
 
@@ -4181,6 +5487,41 @@ if (typeof exports != "undefined") {
 }
 if (coopy == null) {
     coopy = window.daff;
+}
+
+var CellView = function() {
+}
+
+CellView.prototype.toString = function(d) {
+    return ""+d;
+}
+
+CellView.prototype.equals = function(d1,d2) {
+    return d1==d2;
+}
+
+CellView.prototype.toDatum = function(d) {
+    return d;
+}
+
+CellView.prototype.makeHash = function() {
+    return {};
+}
+
+CellView.prototype.hashSet = function(d,k,v) {
+    d[k] = v;
+}
+
+CellView.prototype.hashGet = function(d,k) {
+    return d[k];
+}
+
+CellView.prototype.hashExists = function(d,k) {
+    return k in d;
+}
+
+CellView.prototype.isHash = function(d) {
+    return d && (typeof d  === "object");
 }
 
 var TableView = function(data) {
@@ -4225,7 +5566,8 @@ TableView.prototype.toString = function() {
 }
 
 TableView.prototype.getCellView = function() {
-    return new coopy.SimpleView();
+    return new CellView();
+    //return new coopy.SimpleView();
 }
 
 TableView.prototype.isResizable = function() {
@@ -4385,6 +5727,118 @@ if (typeof exports != "undefined") {
 
 })();
 if (typeof exports != "undefined") {
+    (function() {
+	var daff = exports;
+
+	SqliteDatabase = function(db,Fiber) {
+	    this.db = db;
+	    this.row = null;
+	    this.active = false;
+	    this.index2name = {};
+	    this.Fiber = Fiber;
+	}
+
+	SqliteDatabase.prototype.getQuotedColumnName = function (name) {
+	    return name;
+	}
+
+	SqliteDatabase.prototype.getQuotedTableName = function (name) {
+	    return name;
+	}
+
+	SqliteDatabase.prototype.getColumns = function(name) {
+	    var fiber = this.Fiber.current;
+	    var qname = this.getQuotedColumnName(name);
+	    var self = this;
+	    this.db.all("pragma table_info("+qname+")", function(err,rows) {
+		var lst = [];
+		for (var i in rows) {
+		    var x = rows[i];
+		    lst.push(new daff.SqlColumn.byNameAndPrimaryKey(x['name'],x['pk']>0));
+		    self.index2name[i] = x['name'];
+		}
+		fiber.run(lst);
+	    });
+	    return this.Fiber.yield();
+	}
+
+	SqliteDatabase.prototype.exec = function(query,args) {
+	    var fiber = this.Fiber.current;
+	    if (args==null) {
+		this.db.run(query,function(err) {
+		    if (err) console.log(err);
+		    fiber.run(err==null);
+		});
+		return this.Fiber.yield();
+	    }
+	    var statement = this.db.run(query,args,function(err) {
+		if (err) console.log(err);
+		fiber.run(err==null);
+	    });
+	    return this.Fiber.yield();
+	}
+
+	SqliteDatabase.prototype.beginRow = function(tab,row,order) {
+	    return this.begin("SELECT * FROM " + this.getQuotedColumnName(tab) + " WHERE rowid = ?",
+			      [row],
+			      order);
+	}
+
+	SqliteDatabase.prototype.begin = function(query,args,order) {
+	    if (order!=null) {
+		this.index2name = {};
+		var len = order.length;
+		for (var i=0; i<len; i++) {
+		    this.index2name[i] = order[i];
+		}
+	    }
+	    var fiber = this.Fiber.current;
+	    this.active = true;
+	    var self = this;
+	    this.db.each(query,(args==null)?[]:args,function(err,row) {
+		if (err) {
+		    console.log(err);
+		    fiber.run([false,0]);
+		} else {
+		    fiber.run([true,row]);
+		}
+	    },function(err,n) {
+		fiber.run([false,n]);
+	    });
+	    return true;
+	}
+
+	SqliteDatabase.prototype.read = function() {
+	    if (!this.active) return false;
+	    var v = this.Fiber.yield();
+	    if (v[0]) {
+		this.row = v[1];
+		return true;
+	    }
+	    this.row = null;
+	    this.active = false;
+	    return false;
+	}
+
+	SqliteDatabase.prototype.get = function(index) {
+	    return this.row[this.index2name[index]];
+	}
+
+	SqliteDatabase.prototype.end = function() {
+	    while (this.active) {
+		this.read();
+	    }
+	}
+
+	SqliteDatabase.prototype.rowid = function() {
+	    return "rowid";
+	}
+
+	exports.SqliteDatabase = SqliteDatabase;
+
+    })();
+}
+if (typeof exports != "undefined") {
 
     var tio = {};
     var tio_args = [];
@@ -4393,6 +5847,8 @@ if (typeof exports != "undefined") {
     var fs = require('fs');
     var exec = require('child_process').exec;
     var readline = null;
+    var Fiber = null;
+    var sqlite3 = null;
 
     tio.getContent = function(name) {
 	if (name=="-") {
@@ -4424,6 +5880,14 @@ if (typeof exports != "undefined") {
 
     tio.exists = function(path) {
 	return fs.existsSync(path);
+    }
+
+    tio.openSqliteDatabase = function(path) {
+	if (Fiber) {
+	    return new SqliteDatabase(new sqlite3.Database(path),Fiber);
+	}
+	throw("run inside Fiber plz");
+	return null;
     }
 
     var cmd_result = 1;
@@ -4482,6 +5946,22 @@ if (typeof exports != "undefined") {
 
 if (typeof require != "undefined") {
     if (require.main === module) {
-	exports.run_daff_main();
+	try {
+	    exports.run_daff_main();
+	} catch (e) {
+	    if (e == "run inside Fiber plz") {
+		try {
+		    Fiber = require('fibers');
+		    sqlite3 = require('sqlite3');
+		} catch (err) {
+		    // We don't have what we need for accessing the sqlite database.
+		    console.log("No sqlite3/fibers");
+		}
+		Fiber(function() {
+		    exports.run_daff_main();
+		    console.log("ok");
+		}).run();
+	    }
+	}
     }
 }
